@@ -1,0 +1,62 @@
+# ── Python ──────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+.eggs/
+build/
+dist/
+.installed.cfg
+MANIFEST
+
+# ── Virtual environments ────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Test + coverage ─────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+nosetests.xml
+coverage.xml
+
+# ── Editors / IDEs ──────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── Claude Code / agent local state ─────────────────────────────────
+# Personal, machine-specific permissions — not shared. A shared
+# `.claude/settings.json` (if you add one) stays tracked.
+.claude/settings.local.json
+# Project instructions for Claude Code — kept local, not pushed.
+CLAUDE.md
+
+# ── OS-specific ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Project-specific generated outputs ──────────────────────────────
+# `simulate.py` writes timestamped report directories under report/.
+# Code creates them on demand (mkdir parents=True, exist_ok=True), so
+# the directory itself is not tracked.
+report/
+
+# Locally-generated PyFiberAmp reference outputs (filled in by
+# validation/generate_pyfiberamp_reference.py — committed as `null`
+# placeholders in the JSON, so the populated version is local-only).
+# The placeholder JSON itself IS tracked; uncomment the next line only
+# if you start writing other local-only outputs into validation/.
+# validation/*_local.*
+
+# Jupyter notebook outputs / checkpoints
+.ipynb_checkpoints/

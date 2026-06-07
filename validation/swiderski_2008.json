@@ -1,0 +1,50 @@
+{
+  "name": "Świderski 2008 single-stage validation",
+  "description": "Reproduces J. Świderski, A. Zając, M. Skorczakowski, 'Diode-seeded nanosecond Yb-doped fiber amplifier operating at the repetition rate up to 500 kHz,' Optica Applicata XXXVIII(4), 669-676 (2008). Single-stage MOFPA: pulsed 1063.91 nm laser-diode seed, Nufern Yb-doped LMA double-clad gain fiber (20/400 µm, NA 0.06, 13 dB total absorption at 976 nm), 978 nm CW co-propagating pump (11.4 W launched into fiber). Seed enters via fiber-pigtailed isolator and free-space launch (~70% efficiency). The validation script overrides seed.average_power and seed.pulse_duration to sweep across the 100-kHz test points published in the paper's Fig. 5 / Table.",
+  "seed": {
+    "average_power": 0.0015,
+    "rep_rate": 100000.0,
+    "pulse_duration": 11e-09,
+    "linewidth": 138000000000.0,
+    "wavelength": 1.06391e-06,
+    "mfd": 5e-06
+  },
+  "components": [
+    {
+      "type": "Isolator",
+      "name": "PIGTAIL-ISO+LAUNCH",
+      "insertion_loss_dB": 1.55,
+      "isolation_dB": 22.0
+    },
+    {
+      "type": "Amplifier",
+      "name": "AMP-SWIDERSKI",
+      "core_diameter": 2e-05,
+      "clad_diameter": 0.0004,
+      "core_na": 0.06,
+      "length": 2.7,
+      "clad_absorption_dB_per_m": 4.8,
+      "pump_power": 11.4,
+      "pump_direction": "co",
+      "pump_wavelength": 9.78e-07,
+      "signal_wavelength": 1.06391e-06,
+      "dopant": "Yb",
+      "num_segments": 200,
+      "R_in": 0.0,
+      "R_out": 0.0001,
+      "m_pol": 2,
+      "alpha_bg_dB_per_m": 0.005
+    }
+  ],
+  "metadata": {
+    "validation_target": "Świderski et al., Optica Applicata XXXVIII(4), 669-676 (2008)",
+    "citation_doi": "no DOI; see http://opticaapplicata.pwr.edu.pl/",
+    "fiber_part": "Nufern Yb-doped LMA double-clad, 20/400 µm, NA_core 0.06, NA_clad 0.46",
+    "clad_absorption_source": "Paper states 13 dB total absorption at 976 nm (95% pump absorbed). Length 2.7 m × 4.8 dB/m = 12.96 dB total. The 4.8 dB/m at 976 nm is consistent with Coherent/Nufern published spec for their LMA-YDF-20/400-VIII fiber family (typically 4.6-5.4 dB/m at 976 nm); paper does not give the per-meter rate so this is a reasonable estimate. The actual fiber length is described as 'optimal length specified by Nufern for ~95% absorption' but the value is not numerically tabulated in the paper.",
+    "linewidth_source": "Paper states 3-dB spectral width 0.52 nm at 1063.91 nm. Δν = c·Δλ/λ² ≈ 138 GHz.",
+    "launch_path": "Seed pigtail has built-in isolator (PER >22 dB, IL not stated; assumed ~0.5 dB). Free-space coupling onto gain-fiber facet has ~70% launch efficiency (paper). Combined: -1.55 dB modeled here as a single Isolator component named PIGTAIL-ISO+LAUNCH.",
+    "pump_launch_efficiency": "Paper states pump launching efficiency >90%. The 11.4 W value used here is the power *launched into* the active fiber per the paper's Fig. 4-6 axes ('Pump power launched into the fiber'), so no additional pump-side correction is applied.",
+    "validation_script": "validation/run_validation.py runs the model at the published 100 kHz, 11.4 W pump test points (Table on page 671): seed avg powers 1.5/2.7/4.0/7.5 mW (after pigtail; this JSON's seed.average_power is set to 1.5 mW for the 11 ns case as a default, but the script overrides per test point) at pulse durations 11/30/50/100 ns, expecting outputs 2.04/2.44/2.6/2.97 W respectively (per Fig 5).",
+    "version": "1.0"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "_doc": "PyFiberAmp canonical Yb-amplifier example outputs, used as an external cross-validation reference. To regenerate, install pyfiberamp (pip install pyfiberamp; GPL-3.0) and run validation/generate_pyfiberamp_reference.py. The PyFiberAmp docs reference this configuration in the 'core-pumped Yb amplifier' tutorial. Fields below are intentionally null until the reference is generated locally — see validation/test_pyfiberamp_agreement.py for the comparison logic. The test skips itself when these fields are null.",
+  "config": {
+    "fiber": "Yb 5/130 (Coherent SM-YDF-5/130-VIII spec sheet)",
+    "fiber_length_m": 2.5,
+    "core_diameter_m": 5e-6,
+    "clad_diameter_m": 130e-6,
+    "core_na": 0.12,
+    "clad_absorption_dB_per_m": 1.65,
+    "pump_wavelength_m": 976e-9,
+    "signal_wavelength_m": 1035e-9,
+    "pump_power_W": 0.3,
+    "signal_power_W": 2e-3,
+    "n_ase_bins": 80,
+    "lambda_min_m": 970e-9,
+    "lambda_max_m": 1100e-9,
+    "pyfiberamp_tolerance": 1e-3
+  },
+  "expected_outputs": {
+    "P_signal_out_W": null,
+    "P_pump_residual_W": null,
+    "ASE_fwd_total_W": null,
+    "ASE_bwd_total_W": null,
+    "small_signal_gain_dB": null
+  },
+  "comparison_tolerance_pct": 5.0,
+  "notes_on_use": "PyFiberAmp's internal solver almost certainly wraps scipy.integrate.solve_bvp (collocation). Our simulator uses iterative shooting. Both solve the same Giles-Desurvire BVP, but channel ordering, ASE-bin alignment, and σ-data sources can differ at the few-% level. A 5% agreement threshold is appropriate for a sanity cross-check — tighter agreement would require matching σ-data tables and grid centroids exactly."
+}
