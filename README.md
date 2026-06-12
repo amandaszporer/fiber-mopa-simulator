@@ -123,6 +123,8 @@ the physical double-pass FBG topology — see `docs/CHANGELOG.md` (2026-05-17 #5
 
 The system is JSON-driven through `framework.SystemConfig`. The simplest workflow is to edit the JSON directly. For repeated tweak/run cycles, use the round-trip pattern in `examples/run_example.py` (load → mutate the dict → re-instantiate → save).
 
+All values are SI. The `// unit` annotations in the examples below are for documentation only — strip them before saving, since real JSON does not allow comments.
+
 ### Changing Seed Parameters
 
 Edit the `seed` block in `examples/bgu_3stage_mopa.json` (or your own copy). All values are SI:
@@ -148,8 +150,8 @@ Find the amplifier component by `name` and edit its fields:
 {
   "type": "Amplifier",
   "name": "AMP-1",
-  "pump_power": 1.0,    // <-- change this
-  "length": 3.0,        // <-- and/or this
+  "pump_power": 1.0,    // W   <-- change this
+  "length": 3.0,        // m   <-- and/or this
   ...
 }
 ```
@@ -170,8 +172,8 @@ sim.run()
 Edit the dict in `components`. Field names match the `Param` schema in each component class:
 
 ```json
-{ "type": "Circulator",       "name": "CIRC-1",   "insertion_loss_dB": 0.5 },
-{ "type": "ModeFieldAdapter", "name": "MFA-5/15", "insertion_loss_dB": 0.3, "output_mfd": 1.5e-05 }
+{ "type": "Circulator",       "name": "CIRC-1",   "insertion_loss_dB": 0.5 },                       // insertion_loss_dB: dB
+{ "type": "ModeFieldAdapter", "name": "MFA-5/15", "insertion_loss_dB": 0.3, "output_mfd": 1.5e-05 } // insertion_loss_dB: dB, output_mfd: m
 ```
 
 To insert a brand-new component, add a new dict at the desired position in the `components` list.
@@ -185,20 +187,20 @@ For a different gain fiber, set the amplifier dict's geometry/dopant fields dire
   "type": "Amplifier",
   "name": "AMP-2",
   "core_diameter": 1e-05,            // m
-  "clad_diameter": 1.25e-04,          // m
-  "core_na": 0.075,
-  "length": 2.0,                      // m
-  "clad_absorption_dB_per_m": 2.5,    // pump absorption spec from manufacturer
-  "pump_power": 9.0,                  // W
-  "pump_direction": "co",
-  "pump_wavelength": 9.76e-07,
-  "signal_wavelength": 1.064e-06,
-  "dopant": "Yb",
-  "num_segments": 200,
-  "R_in": 0.0,
-  "R_out": 1e-04,
-  "m_pol": 2,
-  "alpha_bg_dB_per_m": 0.005
+  "clad_diameter": 1.25e-04,         // m
+  "core_na": 0.075,                  // numerical aperture (dimensionless)
+  "length": 2.0,                     // m
+  "clad_absorption_dB_per_m": 2.5,   // dB/m (pump absorption spec from manufacturer)
+  "pump_power": 9.0,                 // W
+  "pump_direction": "co",            // "co" (co-pumped); only co-pumping is supported
+  "pump_wavelength": 9.76e-07,       // m
+  "signal_wavelength": 1.064e-06,    // m
+  "dopant": "Yb",                    // dopant species (string)
+  "num_segments": 200,               // spatial grid points (count, dimensionless)
+  "R_in": 0.0,                       // input-facet power reflectivity (fraction, 0–1)
+  "R_out": 1e-04,                    // output-facet power reflectivity (fraction, 0–1)
+  "m_pol": 2,                        // polarization modes (1 = PM, 2 = non-PM)
+  "alpha_bg_dB_per_m": 0.005         // dB/m (background fiber loss)
 }
 ```
 
@@ -212,27 +214,27 @@ For a different gain fiber, set the amplifier dict's geometry/dopant fields dire
 Add the inter-stage components and the amplifier dict to the `components` list in your config JSON, in chain order:
 
 ```json
-{ "type": "Isolator",         "name": "ISO-HP-3",  "insertion_loss_dB": 0.5, "isolation_dB": 30.0 },
-{ "type": "ModeFieldAdapter", "name": "MFA-30/40", "insertion_loss_dB": 0.5, "output_mfd": 4e-05 },
-{ "type": "PumpCombiner",     "name": "PC-4",      "insertion_loss_dB": 0.5 },
+{ "type": "Isolator",         "name": "ISO-HP-3",  "insertion_loss_dB": 0.5, "isolation_dB": 30.0 }, // insertion_loss_dB, isolation_dB: dB
+{ "type": "ModeFieldAdapter", "name": "MFA-30/40", "insertion_loss_dB": 0.5, "output_mfd": 4e-05 }, // insertion_loss_dB: dB, output_mfd: m
+{ "type": "PumpCombiner",     "name": "PC-4",      "insertion_loss_dB": 0.5 },                       // insertion_loss_dB: dB
 {
   "type": "Amplifier",
   "name": "AMP-4",
-  "core_diameter": 4e-05,
-  "clad_diameter": 2.5e-04,
-  "core_na": 0.06,
-  "length": 1.0,
-  "clad_absorption_dB_per_m": 5.0,
-  "pump_power": 150.0,
-  "pump_direction": "co",
-  "pump_wavelength": 9.76e-07,
-  "signal_wavelength": 1.064e-06,
-  "dopant": "Yb",
-  "num_segments": 200,
-  "R_in": 0.0,
-  "R_out": 1e-04,
-  "m_pol": 2,
-  "alpha_bg_dB_per_m": 0.005
+  "core_diameter": 4e-05,            // m
+  "clad_diameter": 2.5e-04,          // m
+  "core_na": 0.06,                   // numerical aperture (dimensionless)
+  "length": 1.0,                     // m
+  "clad_absorption_dB_per_m": 5.0,   // dB/m
+  "pump_power": 150.0,               // W
+  "pump_direction": "co",            // "co" (co-pumped); only co-pumping is supported
+  "pump_wavelength": 9.76e-07,       // m
+  "signal_wavelength": 1.064e-06,    // m
+  "dopant": "Yb",                    // dopant species (string)
+  "num_segments": 200,               // spatial grid points (count, dimensionless)
+  "R_in": 0.0,                       // input-facet power reflectivity (fraction, 0–1)
+  "R_out": 1e-04,                    // output-facet power reflectivity (fraction, 0–1)
+  "m_pol": 2,                        // polarization modes (1 = PM, 2 = non-PM)
+  "alpha_bg_dB_per_m": 0.005         // dB/m (background fiber loss)
 }
 ```
 
