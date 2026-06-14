@@ -127,18 +127,33 @@ def render_metadata_form(meta) -> None:
 
 
 def _req_minmax(req, key, label, unit, scale, defaults) -> None:
-    """Render an optional ``{min, max}`` requirement block."""
-    on = st.checkbox(f"{label} range", value=key in req, key=f"req:{key}:on")
-    if on:
-        cur = req.get(key) or {"min": defaults[0], "max": defaults[1]}
-        c = st.columns(2)
-        lo = c[0].number_input(f"Min {label.lower()} [{unit}]",
+    """Render a requirement with independent optional ``min`` / ``max`` bounds.
+
+    Each bound has its own checkbox, so a one-sided requirement (e.g. a
+    ``peak_power`` floor with no ceiling) round-trips faithfully instead of
+    silently gaining the other bound. This matches the engine, which treats
+    ``min`` and ``max`` as independently optional (see
+    ``framework._fmt_range_row``).
+    """
+    cur = req.get(key) or {}
+    c = st.columns(2)
+    use_min = c[0].checkbox(f"Min {label.lower()} [{unit}]",
+                            value="min" in cur, key=f"req:{key}:min:on")
+    use_max = c[1].checkbox(f"Max {label.lower()} [{unit}]",
+                            value="max" in cur, key=f"req:{key}:max:on")
+    new: dict = {}
+    if use_min:
+        lo = c[0].number_input(f"Min [{unit}]",
                                value=float(cur.get("min", defaults[0])) * scale,
                                format="%g", key=f"req:{key}:min")
-        hi = c[1].number_input(f"Max {label.lower()} [{unit}]",
+        new["min"] = lo / scale
+    if use_max:
+        hi = c[1].number_input(f"Max [{unit}]",
                                value=float(cur.get("max", defaults[1])) * scale,
                                format="%g", key=f"req:{key}:max")
-        req[key] = {"min": lo / scale, "max": hi / scale}
+        new["max"] = hi / scale
+    if new:
+        req[key] = new
     else:
         req.pop(key, None)
 
