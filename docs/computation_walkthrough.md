@@ -351,11 +351,13 @@ inversion equation**, so backward ASE in particular eats inversion that a
 pump-and-signal-only model would miss — which is why the spectrally-resolved model
 produces lower n2 (and lower gain) than a naïve scalar model in high-gain stages.
 
-#### Safety check: parasitic lasing
+#### Solver-health flag
 
-Instead of a hard gain cap, the BVP solver checks the parasitic-lasing condition
-`G(lambda)^2 x R_in x R_out >= 1` (see `ase.md`) and flags the stage if no steady
-state exists. Gain saturates naturally through ASE depletion of the inversion.
+Instead of a hard gain cap, gain saturates naturally through ASE depletion of the
+inversion. If the iteration nevertheless diverges (the ASE/signal fields run
+away), the solver clamps the result and raises a generic `solver_failed` flag
+(see `ase.md`) so the stage is reported as having no stable steady state rather
+than producing untrustworthy numbers.
 
 ### 4.3 After the propagation loop — computing output values
 
@@ -395,7 +397,7 @@ ASE_ratio_dB  = 10 x log10(total_ase_fwd / P_signal_out)
 
 This measures noise relative to signal; the acceptance threshold is < -20 dB (ASE
 at least 100× below the signal). The spectral model also reports the peak ASE
-wavelength and a parasitic-lasing flag. See `ase.md`.
+wavelength and a solver-health flag. See `ase.md`.
 
 ---
 
@@ -583,7 +585,7 @@ block) are:
 | Peak power     | ≥ 15 kW              |
 
 Per-stage checks (must all pass): ASE < -20 dB, SBS ratio < 1.0, SRS ratio < 1.0,
-no parasitic lasing.
+solver reached a stable steady state.
 
 The spectral-width criterion compares against the linewidth converted from Hz to
 nm:

@@ -167,7 +167,7 @@
       "ase_ratio_dB_max":    -20,
       "sbs_ratio_max":         1.0,
       "srs_ratio_max":         1.0,
-      "no_parasitic_lasing":   true
+      "solver_stable":         true
     }
   }
 }

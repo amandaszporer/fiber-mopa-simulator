@@ -34,7 +34,7 @@ The script sweeps the four 100-kHz published data points (Table p.671 + Fig. 5):
 ## Current result (2026-05-09)
 
 ```
-OVERALL: FAIL — all four data points trip "SOLVER FAIL (parasitic lasing)"
+OVERALL: FAIL — all four data points trip "SOLVER FAIL (no stable steady state)"
 ```
 
 This is **not** a validation failure of the underlying physics. It is a real limitation of the iterative-shooting BVP solver in `ase/solver_steady.py`, surfaced by attempting to replicate the Świderski experiment.
@@ -61,7 +61,7 @@ P_pump (W)   Status
 0.5          converges, sensible (–12 dB net)
 1.0          converges (–2.6 dB)
 2.0          converges (40 dB, 98 iters — at convergence cap)
-3.0+         parasitic lasing trips, output unphysical
+3.0+         solver-failure flag trips, output unphysical
 ```
 
 ### What this means for our project

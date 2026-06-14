@@ -101,7 +101,7 @@ The core physics engine. Each amplifier stage:
 
 1. **BVP gain solver** — iterative-shooting solve of the spatial propagation equations across 1 pump + 1 signal + 160 forward ASE + 160 backward ASE channels, all coupled to a self-consistent inversion equation. See `docs/ase.md` for details.
 2. **ASE tracking** — forward and backward ASE spectra are produced as part of the BVP solve, on a 160-bin wavelength grid (970–1130 nm).
-3. **Parasitic-lasing detection** — the solver checks `G(λ)² · R_in · R_out ≥ 1` after convergence and flags the stage if no steady state exists.
+3. **Solver-health flag** — if the BVP iteration diverges (the ASE/signal fields run away) the solver clamps the result and flags the stage as having no stable steady state, rather than reporting untrustworthy numbers.
 4. **Nonlinear threshold checks** — SBS and SRS thresholds evaluated against the BVP-derived output peak power.
 5. **Mode A / Mode B** — `propagate(state, mode="time-dependent")` is the default: Mode B with auto-dispatch. At high rep (period < 0.1·τ, e.g. the BGU 100 kHz operating point) it delegates to Mode A and returns bit-identical numbers. At lower rep it runs the **Level 5** cycle — B1 (inter-pulse rate-equation time-stepping) + B2 (Lax-Wendroff (z, t) pulse PDE), iterated to periodic steady state. Pass `mode="steady"` (or `simulate.py --steady`) to force Mode A regardless of rep rate. Pass `mode="full"` (or `simulate.py --force-b2`) to force the B1+B2 path even at high rep — useful for pulse-shape distortion studies; this also enables the `pulse_shape.png` plot.
 

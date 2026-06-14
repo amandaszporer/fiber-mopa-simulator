@@ -60,7 +60,7 @@ class RunResult:
     pump_in_W: float
     pump_residual_W: float
     converged: bool
-    parasitic_lasing: bool
+    solver_failed: bool
     iterations: int
 
 
@@ -91,7 +91,7 @@ def run_one(cfg_template: SystemConfig, tp: TestPoint) -> RunResult:
         pump_in_W=amp.pump_power,
         pump_residual_W=info["P_pump_residual"],
         converged=info["solver_converged"],
-        parasitic_lasing=info["parasitic_lasing"],
+        solver_failed=info["solver_failed"],
         iterations=info["solver_iterations"],
     )
 
@@ -105,8 +105,8 @@ def fmt_pct(actual: float, expected: float) -> str:
 
 def classify(r: RunResult, tp: TestPoint) -> str:
     """Categorise the simulator's result against the published value."""
-    if r.parasitic_lasing:
-        return "SOLVER FAIL (parasitic lasing — no physical steady state)"
+    if r.solver_failed:
+        return "SOLVER FAIL (no stable steady state — results unreliable)"
     if not r.converged:
         return "SOLVER FAIL (did not converge)"
     energy_in = r.pump_in_W + tp.seed_avg_mW * 1e-3

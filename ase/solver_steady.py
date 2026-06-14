@@ -73,12 +73,13 @@ class SteadyResult:
     converged: bool
     iterations: int
     pump_direction: str = "co"             # "co" (pump in at z=0) or "counter" (z=L)
-    parasitic_lasing: bool = False
-    parasitic_gain_max_dB: float = 0.0
+    # True when the solve did not reach a trustworthy steady state: the
+    # iteration diverged and the ASE/signal fields had to be clamped, so the
+    # reported numbers are not physical. A generic numerical-health flag.
+    solver_failed: bool = False
     # True when the spatial grid is too coarse for the fiber's gain
     # (g0·dz > _GRID_GAIN_PER_SEGMENT_MAX): the forward sweep over-amplifies and
-    # may run away. This is a numerical artifact (fix: raise num_segments), not
-    # physical parasitic lasing.
+    # may run away. This is a numerical artifact (fix: raise num_segments).
     under_resolved: bool = False
     notes: list[str] = field(default_factory=list)
 
@@ -361,38 +362,6 @@ def solve_pfield_fixed_n2(
     return z, P_pump_z, P_signal_z, P_ase_fwd_z, P_ase_bwd_z
 
 
-def _check_parasitic_lasing(
-    geom: AmplifierGeometry,
-    grid: SpectralGrid,
-    n2_z: np.ndarray,
-    z: np.ndarray,
-    R_in: float,
-    R_out: float,
-) -> tuple[bool, float]:
-    """ase.md §5.3: round-trip gain G(λ)²·R_in·R_out ≥ 1 ⇒ parasitic lasing.
-
-    Computes G(λ) = exp(∫ g(λ,z) dz) over the converged n2 profile and checks
-    the threshold per bin.
-    """
-    if R_in <= 0 or R_out <= 0:
-        return False, 0.0
-    one_minus = 1.0 - n2_z
-    # g(λ, z) = Γ(λ)·N·[n2·σ_e(λ) - (1-n2)·σ_a(λ)]
-    # Shape: [n_z, n_bins]
-    g_lam_z = (
-        grid.gamma[None, :] * geom.N_Yb
-        * (n2_z[:, None] * grid.sigma_e[None, :]
-           - one_minus[:, None] * grid.sigma_a[None, :])
-    )
-    g_lam_z -= geom.alpha_bg
-    int_g_lam = np.trapezoid(g_lam_z, z, axis=0)            # [n_bins]
-    G_lam = np.exp(int_g_lam)
-    round_trip = G_lam ** 2 * R_in * R_out
-    max_round_trip = float(round_trip.max())
-    max_g_dB = float(10 * np.log10(max(max_round_trip, 1e-300)))
-    return max_round_trip >= 1.0, max_g_dB
-
-
 def _spontaneous_emission_init(
     geom: AmplifierGeometry,
     grid: SpectralGrid,
@@ -551,7 +520,7 @@ def solve_steady_state(
     # segment (g0·dz) from the pump-only asymptotic inversion. If a single
     # segment can amplify by more than ~e^0.05, the explicit forward sweep can
     # under-resolve the gain-saturation feedback and run away — a coarse-grid
-    # numerical artifact, not physical parasitic lasing. (Same g0 estimate as
+    # numerical artifact. (Same g0 estimate as
     # solver_health.small_signal_g0L, but max over the ASE bins.) This is the
     # geometric condition; the result is only *flagged* under_resolved below if
     # the grid actually caused a failure (a converged solve was resolved enough).
@@ -688,8 +657,9 @@ def solve_steady_state(
 
         # Runaway detection: if any single bin exceeds the sentinel power, the
         # iteration is diverging. Bail out and clamp. The cause is either an
-        # under-resolved grid (numerical artifact — see the guard above) or a
-        # genuinely non-physical operating point; distinguish them in the note.
+        # under-resolved grid (numerical artifact — see the guard above) or an
+        # operating point with no stable steady state; distinguish them in the
+        # note. Either way the reported numbers are not trustworthy.
         if (P_ase_fwd_z.max() > ase_runaway_threshold_W
                 or P_ase_bwd_z.max() > ase_runaway_threshold_W):
             runaway = True
@@ -699,13 +669,13 @@ def solve_steady_state(
             if grid_marginal:
                 notes.append(
                     "ASE runaway from an under-resolved spatial grid — a "
-                    "numerical artifact, not physical parasitic lasing; "
+                    "numerical artifact; "
                     f"increase num_segments to >= {n_z_recommended}."
                 )
             else:
                 notes.append(
-                    "ASE runaway — system appears past parasitic-lasing "
-                    "threshold; no physical steady state."
+                    "ASE runaway — the solve did not reach a stable steady "
+                    "state; reported values are unreliable."
                 )
             break
 
@@ -740,14 +710,6 @@ def solve_steady_state(
             f"num_segments to >= {n_z_recommended} for stable convergence."
         )
 
-    parasitic, max_g_dB = _check_parasitic_lasing(
-        geom, grid, n2_z, z, R_in, R_out
-    )
-    if parasitic:
-        notes.append(
-            f"Parasitic lasing condition met: max round-trip gain {max_g_dB:.1f} dB"
-        )
-
     return SteadyResult(
         z=z,
         n2_z=n2_z,
@@ -758,8 +720,7 @@ def solve_steady_state(
         converged=converged,
         iterations=iterations,
         pump_direction=pump_direction,
-        parasitic_lasing=parasitic or runaway,
-        parasitic_gain_max_dB=max_g_dB,
+        solver_failed=runaway,
         under_resolved=under_resolved,
         notes=notes,
     )

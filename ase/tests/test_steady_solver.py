@@ -45,7 +45,7 @@ def test_under_resolved_flag_trips_on_coarse_grid():
 
 def test_under_resolved_clears_and_converges_on_fine_grid():
     """Refining the spatial grid recovers the physical, ASE/saturation-clamped
-    steady state: converged, not parasitic, not flagged.
+    steady state: converged, no solver issues, not flagged.
 
     With the measured Melkumov AS dataset the 915 nm pump σ_a is smaller, so the
     back-derived N_Yb (and hence g₀·L) is higher than under the old hand-traced
@@ -57,7 +57,7 @@ def test_under_resolved_clears_and_converges_on_fine_grid():
     r = solve_steady_state(geom, grid, 0.9, 1e-3, a0, R_out=1e-4, n_z=2000)
     assert r.converged
     assert not r.under_resolved
-    assert not r.parasitic_lasing
+    assert not r.solver_failed
     assert 0.2 < r.P_signal_z[-1] < 0.4
 
 
@@ -184,10 +184,11 @@ def test_ase_grows_with_pump(stage1_setup, zero_ase):
     )
 
 
-def test_parasitic_lasing_with_flat_cleave(stage1_long, zero_ase):
-    """A long, highly-doped fiber with a flat-cleaved facet (R = 3.5%) should
-    trip the parasitic-lasing flag from the runaway sentinel or the
-    round-trip-gain check."""
+def test_runaway_flags_solver_issue(stage1_long, zero_ase):
+    """A long, highly-doped, zero-signal fiber drives the ASE field into runaway;
+    the solver must not pretend it found a steady state — it raises the generic
+    `solver_failed` flag and reports as not converged. (Diagnosing *why* no
+    steady state exists is out of scope; we only flag that it doesn't.)"""
     geom, grid, _ = stage1_long
     r = solve_steady_state(
         geom, grid, P_pump=1.0, P_signal_avg=0.0,
@@ -195,7 +196,8 @@ def test_parasitic_lasing_with_flat_cleave(stage1_long, zero_ase):
         R_in=0.035, R_out=0.035,  # flat-cleaved both ends
         max_iter=80,
     )
-    assert r.parasitic_lasing
+    assert r.solver_failed
+    assert not r.converged
 
 
 def test_grid_convergence_total_ase(stage1_setup):

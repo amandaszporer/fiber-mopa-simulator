@@ -7,6 +7,80 @@ spectrally-resolved BVP into the current Level 5 layered solver.
 
 ---
 
+## 2026-06-14
+
+### Parasitic-lasing detection removed; replaced with a generic solver-health flag
+
+Parasitic lasing is a **hardware** behaviour (it depends on real end-facet
+reflectivities, splices, and cavity geometry) and was determined to be **out of
+scope** for this simulator. All parasitic-lasing detection and calculation has
+been removed; in its place the solver carries a generic `solver_failed` flag
+that simply reports *"the solve did not reach a trustworthy steady state."*
+
+**Removed.**
+- `_check_parasitic_lasing()` (`solver_steady.py`) and `_check_parasitic_b2()`
+  (`solver_time.py`) — both computed the round-trip-gain condition
+  `G(λ)² · R_in · R_out ≥ 1` and are gone entirely.
+- The `parasitic_lasing` and `parasitic_gain_max_dB` fields on `SteadyResult`
+  and the `parasitic_lasing` field on `AseState`.
+
+**Replaced with.** A single boolean `solver_failed` on `SteadyResult` /
+`AseState` (and the `info["solver_failed"]` key). It is set **only** by the
+existing numerical-health guards — the 1 kW-per-bin ASE runaway sentinel in
+Mode A and the NaN/inf guards in the B1/B2 time-marching cycle — when the
+iteration diverges and the fields have to be clamped. No new physics: the
+guards already existed; they no longer attribute the divergence to "parasitic
+lasing," they just flag that the result is unreliable. `converged=False`
+continues to capture the distinct "ran out of iterations" case.
+
+**Surfacing.**
+- Report tag `[LASING]` → `[SOLVER ISSUE: no stable steady state]`.
+- V&V requirement key `no_parasitic_lasing` → `solver_stable` (passes when the
+  stage converged **and** did not fail); the compliance row label changed from
+  "Lasing" to "Solver", showing `ok` / `ISSUE`. Both example configs and the
+  GUI requirements checkbox were updated.
+- `validation/run_validation.py` classification text updated accordingly.
+
+**Docs.** `docs/ase.md` §13 rewritten from "Parasitic Lasing — When Steady
+State Doesn't Exist" to "Solver-Health Flag — When Steady State Doesn't Exist";
+the round-trip-gain equation block, the pitfall, and the comparison/benchmark
+tables were updated. `README.md`, `CLAUDE.md`, `computation_walkthrough.md`,
+`physics_spec.md`, and `validation/README.md` were reworded to drop the
+concept. Facet-reflection boundary conditions remain in the BVP (so the solver
+still *sees* any feedback) — what's gone is the attempt to diagnose oscillation
+from them. The test `test_parasitic_lasing_with_flat_cleave` was renamed to
+`test_runaway_flags_solver_issue` and now asserts `solver_failed` + not
+converged on the same high-gain/flat-cleave configuration.
+
+### Counter-propagating pump support
+
+The amplifier solver now supports **counter-pumping** (`pump_direction="counter"`),
+not just co-pumping. Previously `Amplifier.propagate()` raised
+`NotImplementedError` for any direction other than `"co"`, and the whole solver
+chain hardcoded the pump as a forward channel (boundary condition at z=0,
+integrated in the forward RK4 sweep).
+
+**What changed.** A counter-pump is treated as a **backward channel** — injected
+at z=L and integrated in the backward sweep alongside the backward ASE, using a
+new `_rate_pump()` helper. The signal and forward ASE always propagate from z=0;
+only the pump's direction flips. `pump_direction` is threaded through the entire
+chain: `solve_steady_state`, `solve_pfield_fixed_n2`,
+`_spontaneous_emission_init`, `_linear_gain_shape_init`, the homotopy wrapper,
+`solve_steady_state_robust`, `solve_time_dependent`, `_periodic_steady_state`,
+`_b1_inter_pulse`, and `_b2_pulse` (whose Lax-Wendroff pump advection mirrors to
+−z for a counter-pump). `SteadyResult.pump_residual` now reads the correct facet
+(z=0 for a counter-pump, z=L for a co-pump).
+
+**Validation.** For a saturated quasi-CW stage, co- and counter-pumping give
+near-identical average-power gain (the total absorbed pump dominates), with the
+pump injection end and residual end correctly flipped and absorption conserved —
+confirmed against the co-pump baseline. New regression test
+`test_counter_pump_injects_at_output_end`. A new example config
+`examples/bgu_3stage_mopa_counter.json` runs AMP-1 co-pumped with AMP-2/AMP-3
+counter-pumped.
+
+---
+
 ## 2026-06-07
 
 ### Yb cross-sections: measured Melkumov AS dataset replaces hand-traced anchors

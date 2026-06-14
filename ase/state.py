@@ -24,8 +24,8 @@ class AseState:
     fwd_spectrum is the forward-going ASE power per bin at the *output* end of
     whichever fiber produced this state (or at the *input* of a passive
     component). bwd_spectrum is the backward-going ASE power per bin at the
-    *input* end of the producing stage — kept as a diagnostic and for
-    parasitic-lasing checks; isolators block it from reaching upstream.
+    *input* end of the producing stage — kept as a diagnostic; isolators block
+    it from reaching upstream.
     """
 
     spectral_grid: SpectralGrid
@@ -33,10 +33,13 @@ class AseState:
     bwd_spectrum: np.ndarray            # shape (n_bins,), [W per bin]
     n2_profile: Optional[np.ndarray] = None   # diagnostic; from producing stage
     z_grid: Optional[np.ndarray] = None       # diagnostic; from producing stage
-    parasitic_lasing: bool = False
+    # True when the producing stage's solve did not reach a trustworthy steady
+    # state (the ASE/signal fields diverged — see the runaway/blowup guards in
+    # the solver). A generic numerical-health flag, not a physical diagnosis.
+    solver_failed: bool = False
     # True when the producing stage's spatial grid was too coarse for its gain
-    # (a numerical artifact distinct from physical parasitic lasing — fix by
-    # increasing num_segments). Takes display priority over parasitic_lasing.
+    # (fix by increasing num_segments). Takes display priority over
+    # solver_failed.
     under_resolved: bool = False
 
     @classmethod

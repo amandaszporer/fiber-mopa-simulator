@@ -195,14 +195,14 @@ def render_requirements_form(req) -> None:
         srs = c[2].number_input("Max SRS ratio",
                                 value=float(cur.get("srs_ratio_max", 1.0)),
                                 format="%g", key="req:amplifier:srs")
-        nolase = st.checkbox("Forbid parasitic lasing",
-                             value=bool(cur.get("no_parasitic_lasing", True)),
-                             key="req:amplifier:nolase")
+        stable = st.checkbox("Require stable solver convergence",
+                             value=bool(cur.get("solver_stable", True)),
+                             key="req:amplifier:solver_stable")
         req["amplifier"] = {
             "ase_ratio_dB_max": ase,
             "sbs_ratio_max": sbs,
             "srs_ratio_max": srs,
-            "no_parasitic_lasing": nolase,
+            "solver_stable": stable,
         }
     else:
         req.pop("amplifier", None)

@@ -499,11 +499,10 @@ def _periodic_steady_state(
     # cascade, but not the full robust wrapper — that would recurse into
     # this function via Layer 3). Homotopy by itself only calls
     # `solve_steady_state`, so no recursion risk. The benefit: when the
-    # raw Mode A would find an unphysical fixed point near the parasitic
-    # edge, homotopy walks past it via pump-only → +signal → +ASE
-    # continuation, giving B1+B2 a physical starting n₂(z) profile.
-    # The existing NaN-guard on B1+B2 below is kept as a final backstop
-    # for genuinely past-parasitic configs.
+    # raw Mode A would find an unphysical fixed point, homotopy walks past
+    # it via pump-only → +signal → +ASE continuation, giving B1+B2 a
+    # physical starting n₂(z) profile. The NaN-guard on B1+B2 below is kept
+    # as a final backstop for configs with no stable steady state.
     from .solver_health import compute_solver_health
     warmup = solve_steady_state_homotopy(
         geom=geom, grid=grid,
@@ -515,14 +514,15 @@ def _periodic_steady_state(
         pump_direction=pump_direction,
     )
 
-    # If the system is past parasitic-lasing threshold, no physical periodic
-    # steady state exists. Mode A's runaway clamp gives a sensible (if
-    # unphysical) report; B1+B2 will diverge to NaN under fp64 overflow.
+    # If the warm-start solve failed or did not converge, no usable periodic
+    # steady state exists. Mode A's runaway clamp gives a finite (if
+    # unreliable) report; B1+B2 would diverge to NaN under fp64 overflow.
     # Return the warm-start verbatim with a clarifying note.
-    if warmup.parasitic_lasing or not warmup.converged:
+    if warmup.solver_failed or not warmup.converged:
+        warmup.solver_failed = True
         warmup.notes.append(
-            "B1+B2 skipped: system past parasitic-lasing threshold "
-            "(or Mode A did not converge). No physical periodic steady state."
+            "B1+B2 skipped: the warm-start solve failed or did not converge. "
+            "No usable periodic steady state."
         )
         return warmup
 
@@ -546,16 +546,17 @@ def _periodic_steady_state(
         notes.extend(b1.notes)
 
         # B1's spatial sub-solve has no internal runaway clamp (the operator
-        # split makes it cheaper than Mode A's iterated solver). When the
-        # system is near parasitic but Mode A barely converged, B1 can still
-        # overflow during the rate-equation step. Detect and bail to the
-        # Mode A warmup (clamped but finite).
+        # split makes it cheaper than Mode A's iterated solver). When Mode A
+        # barely converged, B1 can still overflow during the rate-equation
+        # step. Detect and bail to the Mode A warmup (clamped but finite),
+        # flagging the result as a solver failure.
         if not (np.all(np.isfinite(b1.n2_z))
                 and np.all(np.isfinite(b1.P_ase_fwd_z))):
+            warmup.solver_failed = True
             warmup.notes.append(
-                f"B1 numerical blowup in cycle {cycle + 1}: system is on the "
-                f"parasitic-lasing edge — Mode A barely converged but B1's "
-                f"high-n₂ regime overflows. Returning Mode A warmup result."
+                f"B1 numerical blowup in cycle {cycle + 1}: the inversion "
+                f"overflowed (no stable steady state). Returning Mode A "
+                f"warmup result."
             )
             return warmup
 
@@ -572,9 +573,10 @@ def _periodic_steady_state(
         notes.extend(b2.notes)
 
         if not np.all(np.isfinite(b2.n2_post_z)):
+            warmup.solver_failed = True
             warmup.notes.append(
                 f"B2 numerical blowup in cycle {cycle + 1}: pulse propagation "
-                f"overflowed (system on parasitic edge). Returning Mode A "
+                f"overflowed (no stable steady state). Returning Mode A "
                 f"warmup result."
             )
             return warmup
@@ -601,10 +603,6 @@ def _periodic_steady_state(
     z = np.linspace(0.0, geom.fiber_length, n_z)
     P_signal_z_avg = np.linspace(P_signal_avg, P_signal_out_avg, n_z)
 
-    parasitic_lasing, parasitic_dB = _check_parasitic_b2(
-        geom, grid, last_b1.n2_z, z, R_in, R_out,
-    )
-
     notes.append(
         f"periodic B1+B2 {'converged' if converged_periodic else 'capped'} "
         f"after {cycle + 1} cycles; pulse extracted "
@@ -625,40 +623,11 @@ def _periodic_steady_state(
         converged=converged_periodic,
         iterations=cycle + 1,
         pump_direction=pump_direction,
-        parasitic_lasing=parasitic_lasing,
-        parasitic_gain_max_dB=parasitic_dB,
+        solver_failed=False,
         notes=notes,
         t=last_b2.t,
         P_signal_tz=last_b2.P_signal_tz,
     )
-
-
-def _check_parasitic_b2(
-    geom: AmplifierGeometry,
-    grid: SpectralGrid,
-    n2_z: np.ndarray,
-    z: np.ndarray,
-    R_in: float,
-    R_out: float,
-) -> tuple[bool, float]:
-    """Round-trip-gain parasitic check on the pre-pulse n₂(z), reusing the
-    same formula as `solver_steady._check_parasitic_lasing`. Inlined here so
-    we don't need to import a private helper across modules."""
-    if R_in <= 0 or R_out <= 0:
-        return False, 0.0
-    one_minus = 1.0 - n2_z
-    g_lam_z = (
-        grid.gamma[None, :] * geom.N_Yb
-        * (n2_z[:, None] * grid.sigma_e[None, :]
-           - one_minus[:, None] * grid.sigma_a[None, :])
-    )
-    g_lam_z = g_lam_z - geom.alpha_bg
-    int_g_lam = np.trapezoid(g_lam_z, z, axis=0)
-    G_lam = np.exp(int_g_lam)
-    round_trip = G_lam ** 2 * R_in * R_out
-    max_round_trip = float(round_trip.max())
-    max_g_dB = float(10 * np.log10(max(max_round_trip, 1e-300)))
-    return max_round_trip >= 1.0, max_g_dB
 
 
 # ── Layered robust solver (Layers 1+2+3) ────────────────────────────────
@@ -677,10 +646,11 @@ def _check_parasitic_b2(
 #            B1+B2 cycle (a fully-time-dependent IVP, unique attractor
 #            by construction — cannot land on an energy-violating fixed
 #            point). The result is the authoritative steady state.
-#   "All-failed" path: B1+B2 itself bails out (parasitic guard triggers)
-#            means the system has no physical steady state. Return Mode
-#            A's clamped result and surface `solver_path_used="all_failed"`
-#            + the violation flag so the report decoration shows it.
+#   "All-failed" path: B1+B2 itself bails out (the runaway/blowup guard
+#            triggers) means the system has no usable steady state. Return
+#            Mode A's clamped result and surface
+#            `solver_path_used="all_failed"` + the violation flag so the
+#            report decoration shows it.
 #
 # References inline in the implementation.
 
@@ -765,15 +735,14 @@ def solve_steady_state_robust(
     )
     h3 = compute_solver_health(r3, geom, grid, P_pump, P_signal_avg)
 
-    if r3.parasitic_lasing or not r3.converged:
-        # B1+B2 itself bailed out — no physical steady state exists. The
-        # warmup Mode A result (returned by `_periodic_steady_state` via
-        # the parasitic guard) is the cleanest "system is past parasitic"
-        # report we can produce. Mark `all_failed` so callers know.
+    if r3.solver_failed or not r3.converged:
+        # B1+B2 itself bailed out — no usable steady state exists. The warmup
+        # Mode A result (returned by `_periodic_steady_state` via the
+        # runaway/blowup guard) is the cleanest fallback we can produce.
+        # Mark `all_failed` so callers know.
         r3.notes.append(
-            "Robust solver: all three layers indicate no physical steady "
-            "state. System is past parasitic-lasing threshold; "
-            "values reported are Mode A's runaway-clamped fallback."
+            "Robust solver: all three layers indicate no usable steady "
+            "state; values reported are Mode A's runaway-clamped fallback."
         )
         return _attach(r3, h3, "all_failed", r2.homotopy_steps_used)
 

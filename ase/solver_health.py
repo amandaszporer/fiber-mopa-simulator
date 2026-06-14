@@ -8,10 +8,10 @@ The Giles-Desurvire iterative-shooting BVP in `solver_steady.py` enforces
 than the signal/ASE photons (h·ν_signal) they spawn — the difference is
 phonons (quantum-defect heat). When channel coupling is mild, the
 iteration flows to a unique physical fixed point and the energy budget
-balances automatically. Near the parasitic-lasing edge, the same BVP
-admits multiple self-consistent fixed points, and the shooter can lock
-onto one where every local equation is satisfied to tolerance while the
-global output exceeds the QD ceiling by factors of 2–10×.
+balances automatically. In the high-gain / strong-feedback regime, the
+same BVP admits multiple self-consistent fixed points, and the shooter can
+lock onto one where every local equation is satisfied to tolerance while
+the global output exceeds the QD ceiling by factors of 2–10×.
 
 This module computes three diagnostics that classify a converged
 `SteadyResult` into amplifier health and operating-regime categories.

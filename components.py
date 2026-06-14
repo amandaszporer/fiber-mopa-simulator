@@ -759,7 +759,7 @@ class Amplifier(Component):
             bwd_spectrum=result.ase_bwd_in.copy(),
             n2_profile=result.n2_z.copy(),
             z_grid=result.z.copy(),
-            parasitic_lasing=result.parasitic_lasing,
+            solver_failed=result.solver_failed,
             under_resolved=result.under_resolved,
         )
 
@@ -838,8 +838,7 @@ class Amplifier(Component):
             "peak_ase_bwd_wavelength_nm": float(grid.wavelengths[peak_bwd_idx] * 1e9),
             "solver_iterations": result.iterations,
             "solver_converged": result.converged,
-            "parasitic_lasing": result.parasitic_lasing,
-            "parasitic_gain_max_dB": result.parasitic_gain_max_dB,
+            "solver_failed": result.solver_failed,
             "under_resolved": result.under_resolved,
             "solver_notes": list(result.notes),
             "solver_path_used": result.solver_path_used,

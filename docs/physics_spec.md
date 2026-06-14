@@ -276,7 +276,7 @@ These components only affect power (insertion loss) and, for mode field adapters
 
 ### 6.2 Why Each Component Exists
 
-- **Isolators** between stages prevent backward ASE and reflections from reaching upstream amplifiers (which could cause parasitic lasing or damage).
+- **Isolators** between stages prevent backward ASE and reflections from reaching upstream amplifiers (which could destabilize or damage them).
 - **Circulators + FBGs** (fiber Bragg gratings) monitor backward-propagating power. The FBG reflects backward light at 1064 nm into port 3 of the circulator for monitoring. If SBS or back-reflections spike, the system can shut down.
 - **Mode field adapters** bridge the MFD mismatch between fiber stages. Without them, the splice loss between a 5 µm and 10 µm core fiber would be several dB.
 - **Pump combiners** couple 976 nm pump diode light into the fiber cladding while allowing the 1064 nm signal to pass through the core with minimal loss.

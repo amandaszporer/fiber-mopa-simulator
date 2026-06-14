@@ -293,8 +293,8 @@ class Simulator:
                 )
                 if r.state_out.ase.under_resolved:
                     tag = "   [UNDER-RESOLVED: increase num_segments]"
-                elif r.state_out.ase.parasitic_lasing:
-                    tag = "   [LASING]"
+                elif r.state_out.ase.solver_failed:
+                    tag = "   [SOLVER ISSUE: no stable steady state]"
                 else:
                     tag = ""
                 lines.append(
@@ -461,11 +461,12 @@ class Simulator:
                 f"SRS {label}", f"{info['srs_ratio']:.4f}",
                 f"< {ceiling:g}", info["srs_ratio"] < ceiling,
             ))
-        if amp_req.get("no_parasitic_lasing"):
+        if amp_req.get("solver_stable"):
+            ok = info["solver_converged"] and not info["solver_failed"]
             rows.append((
-                f"Lasing {label}",
-                "yes" if info["parasitic_lasing"] else "no",
-                "no", not info["parasitic_lasing"],
+                f"Solver {label}",
+                "ok" if ok else "ISSUE",
+                "ok", ok,
             ))
         return rows
 
@@ -556,7 +557,7 @@ _AMP_REQ_KEYS = frozenset({
     "ase_ratio_dB_max",
     "sbs_ratio_max",
     "srs_ratio_max",
-    "no_parasitic_lasing",
+    "solver_stable",
 })
 
 
