@@ -192,7 +192,7 @@ For a different gain fiber, set the amplifier dict's geometry/dopant fields dire
   "length": 2.0,                     // m
   "clad_absorption_dB_per_m": 2.5,   // dB/m (pump absorption spec from manufacturer)
   "pump_power": 9.0,                 // W
-  "pump_direction": "co",            // "co" (co-pumped); only co-pumping is supported
+  "pump_direction": "co",            // "co" (co-propagating) or "counter" (counter-propagating) pump
   "pump_wavelength": 9.76e-07,       // m
   "signal_wavelength": 1.064e-06,    // m
   "dopant": "Yb",                    // dopant species (string)
@@ -226,7 +226,7 @@ Add the inter-stage components and the amplifier dict to the `components` list i
   "length": 1.0,                     // m
   "clad_absorption_dB_per_m": 5.0,   // dB/m
   "pump_power": 150.0,               // W
-  "pump_direction": "co",            // "co" (co-pumped); only co-pumping is supported
+  "pump_direction": "co",            // "co" (co-propagating) or "counter" (counter-propagating) pump
   "pump_wavelength": 9.76e-07,       // m
   "signal_wavelength": 1.064e-06,    // m
   "dopant": "Yb",                    // dopant species (string)

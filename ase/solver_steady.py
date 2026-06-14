@@ -72,6 +72,7 @@ class SteadyResult:
     P_ase_bwd_z: np.ndarray                # [n_z, n_bins]
     converged: bool
     iterations: int
+    pump_direction: str = "co"             # "co" (pump in at z=0) or "counter" (z=L)
     parasitic_lasing: bool = False
     parasitic_gain_max_dB: float = 0.0
     # True when the spatial grid is too coarse for the fiber's gain
@@ -108,7 +109,10 @@ class SteadyResult:
 
     @property
     def pump_residual(self) -> float:
-        return float(self.P_pump_z[-1])
+        """Unabsorbed pump leaving the fiber. For a co-pump it exits at z=L;
+        for a counter-pump (injected at z=L) it exits at z=0."""
+        return float(self.P_pump_z[0] if self.pump_direction == "counter"
+                     else self.P_pump_z[-1])
 
 
 def _compute_n2_local(
@@ -236,6 +240,27 @@ def _rate_ase(
     return (g_ase - geom.alpha_bg) * P_ase + S_ase
 
 
+def _rate_pump(
+    P_pump: float,
+    n2: float,
+    geom: AmplifierGeometry,
+    grid: SpectralGrid,
+) -> float:
+    """Pump rate dP_pump/dz (forward-z convention), no spontaneous source.
+
+    Identical to the pump term in `_rate_fwd`, factored out so the backward
+    (counter-pump) RK4 sweep can integrate the pump the same way the backward
+    ASE sweep integrates its channels. For a counter-pump the net coefficient
+    `g_pump - α_bg` is negative (the pump is being absorbed), so stepping from
+    z=L toward z=0 — i.e. adding `dz · rate` — makes the pump decay toward the
+    input end, exactly as a physically-injected backward pump should.
+    """
+    g_pump = geom.gamma_pump * geom.N_Yb * (
+        n2 * grid.sigma_e_pump - (1.0 - n2) * grid.sigma_a_pump
+    )
+    return (g_pump - geom.alpha_bg) * P_pump
+
+
 def solve_pfield_fixed_n2(
     geom: AmplifierGeometry,
     grid: SpectralGrid,
@@ -246,6 +271,7 @@ def solve_pfield_fixed_n2(
     R_in: float,
     R_out: float,
     n_z: int,
+    pump_direction: str = "co",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """One-shot P-field profile for a *fixed* n₂(z) profile.
 
@@ -255,11 +281,16 @@ def solve_pfield_fixed_n2(
     this n₂. Used by B1 between time steps as a much cheaper substitute
     for the full iterative shooting in `solve_steady_state`.
 
+    With `pump_direction="counter"` the pump is injected at z=L and integrated
+    in the backward sweep instead of the forward one; the signal and forward
+    ASE always propagate from z=0.
+
     `n2_z` must already be defined on `n_z` linearly-spaced points over the
     fiber length; the function does NOT update n₂.
 
     Returns (z, P_pump_z, P_signal_z, P_ase_fwd_z, P_ase_bwd_z).
     """
+    counter = pump_direction == "counter"
     z = np.linspace(0.0, geom.fiber_length, n_z)
     dz = z[1] - z[0]
 
@@ -268,12 +299,17 @@ def solve_pfield_fixed_n2(
     P_ase_fwd_z = np.empty((n_z, grid.n_bins))
     P_ase_bwd_z = np.zeros((n_z, grid.n_bins))
 
-    P_pump_z[0] = P_pump_in
+    if counter:
+        P_pump_z[-1] = P_pump_in     # pump injected at the output end
+    else:
+        P_pump_z[0] = P_pump_in
     P_signal_z[0] = P_signal_in
     P_ase_fwd_z[0] = ase_in_fwd
 
     # Forward RK4 — gain coefficients are frozen via n₂(z); only the
-    # propagating powers themselves enter the rate functions.
+    # propagating powers themselves enter the rate functions. For a
+    # counter-pump the pump is NOT advanced here (it is a backward channel);
+    # _rate_fwd's d_pump is simply discarded.
     for i in range(n_z - 1):
         n2_i = float(n2_z[i])
         P_p, P_s, P_a = P_pump_z[i], P_signal_z[i], P_ase_fwd_z[i]
@@ -291,7 +327,8 @@ def solve_pfield_fixed_n2(
             P_p + dz * d_p3, P_s + dz * d_s3,
             P_a + dz * d_a3, n2_i, geom, grid,
         )
-        P_pump_z[i + 1] = max(P_p + dz / 6.0 * (d_p1 + 2 * d_p2 + 2 * d_p3 + d_p4), 0.0)
+        if not counter:
+            P_pump_z[i + 1] = max(P_p + dz / 6.0 * (d_p1 + 2 * d_p2 + 2 * d_p3 + d_p4), 0.0)
         P_signal_z[i + 1] = max(P_s + dz / 6.0 * (d_s1 + 2 * d_s2 + 2 * d_s3 + d_s4), 0.0)
         P_ase_fwd_z[i + 1] = np.maximum(
             P_a + dz / 6.0 * (d_a1 + 2 * d_a2 + 2 * d_a3 + d_a4), 0.0,
@@ -301,7 +338,8 @@ def solve_pfield_fixed_n2(
     P_ase_bwd_z[-1] = R_out * P_ase_fwd_z[-1]
 
     # Backward RK4 — same rate magnitude as forward ASE (isotropic source),
-    # integrated from z=L to z=0.
+    # integrated from z=L to z=0. A counter-pump is integrated alongside the
+    # backward ASE (same z=L→0 direction) using its own rate.
     for i in range(n_z - 2, -1, -1):
         n2_hi = float(n2_z[i + 1])
         P_b = P_ase_bwd_z[i + 1]
@@ -312,6 +350,13 @@ def solve_pfield_fixed_n2(
         P_ase_bwd_z[i] = np.maximum(
             P_b + dz / 6.0 * (r1 + 2 * r2 + 2 * r3 + r4), 0.0,
         )
+        if counter:
+            P_p = P_pump_z[i + 1]
+            q1 = _rate_pump(P_p, n2_hi, geom, grid)
+            q2 = _rate_pump(P_p + 0.5 * dz * q1, n2_hi, geom, grid)
+            q3 = _rate_pump(P_p + 0.5 * dz * q2, n2_hi, geom, grid)
+            q4 = _rate_pump(P_p + dz * q3, n2_hi, geom, grid)
+            P_pump_z[i] = max(P_p + dz / 6.0 * (q1 + 2 * q2 + 2 * q3 + q4), 0.0)
 
     return z, P_pump_z, P_signal_z, P_ase_fwd_z, P_ase_bwd_z
 
@@ -355,16 +400,20 @@ def _spontaneous_emission_init(
     P_signal_avg: float,
     ase_in_fwd: np.ndarray,
     n_z: int,
+    pump_direction: str = "co",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Spontaneous-emission-seeded initial guess for ``solve_steady_state``.
 
-    A single forward sweep of dP_pump/dz with signal = 0 and the ASE source
-    OFF yields an exact pump-only inversion profile n2(z): pump-only has no
+    A single sweep of dP_pump/dz with signal = 0 and the ASE source OFF yields
+    an exact pump-only inversion profile n2(z): pump-only has no
     backward-coupled wave, so no iteration is needed. The spontaneous-emission
     source S_ase(z) evaluated on that profile is then accumulated gain-free
     from each facet to seed the forward/backward ASE fields — a deliberate
     lower-bound floor that lands the production iteration in the *physical*
     (signal-dominated) basin rather than the ASE-runaway one.
+
+    For a counter-pump the pump-only sweep runs from z=L back to z=0 so the
+    seed profile peaks at the injection (output) end.
 
     Returns ``(P_pump_z, P_signal_z, P_ase_fwd_z, P_ase_bwd_z)`` with shapes
     ``(n_z,)``, ``(n_z,)``, ``(n_z, n_bins)``, ``(n_z, n_bins)``.
@@ -377,21 +426,35 @@ def _spontaneous_emission_init(
     dz = z[1] - z[0]
     zeros_bins = np.zeros(n_bins)
 
-    # 1. Pump-only forward sweep (forward Euler — this is only a guess; the
-    #    production RK4 loop corrects any slack). n2 is the steady-state
-    #    inversion driven by the local pump alone.
+    # 1. Pump-only sweep (forward Euler — this is only a guess; the production
+    #    RK4 loop corrects any slack). n2 is the steady-state inversion driven
+    #    by the local pump alone. Co-pump sweeps z=0→L; counter-pump z=L→0.
     P_pump_z = np.empty(n_z)
     n2_pump = np.empty(n_z)
-    P_pump_z[0] = P_pump
-    for i in range(n_z - 1):
-        n2_pump[i] = _compute_n2_local(
-            geom, grid, P_pump_z[i], 0.0, zeros_bins, zeros_bins
+    if pump_direction == "counter":
+        P_pump_z[-1] = P_pump
+        for i in range(n_z - 1, 0, -1):
+            n2_pump[i] = _compute_n2_local(
+                geom, grid, P_pump_z[i], 0.0, zeros_bins, zeros_bins
+            )
+            d_pump = _rate_pump(P_pump_z[i], n2_pump[i], geom, grid)
+            # Stepping toward z=0 (−dz in z): add dz·rate, matching the
+            # backward-channel integration convention used elsewhere.
+            P_pump_z[i - 1] = max(P_pump_z[i] + dz * d_pump, 0.0)
+        n2_pump[0] = _compute_n2_local(
+            geom, grid, P_pump_z[0], 0.0, zeros_bins, zeros_bins
         )
-        d_pump = _rate_fwd(P_pump_z[i], 0.0, zeros_bins, n2_pump[i], geom, grid)[0]
-        P_pump_z[i + 1] = max(P_pump_z[i] + dz * d_pump, 0.0)
-    n2_pump[-1] = _compute_n2_local(
-        geom, grid, P_pump_z[-1], 0.0, zeros_bins, zeros_bins
-    )
+    else:
+        P_pump_z[0] = P_pump
+        for i in range(n_z - 1):
+            n2_pump[i] = _compute_n2_local(
+                geom, grid, P_pump_z[i], 0.0, zeros_bins, zeros_bins
+            )
+            d_pump = _rate_fwd(P_pump_z[i], 0.0, zeros_bins, n2_pump[i], geom, grid)[0]
+            P_pump_z[i + 1] = max(P_pump_z[i] + dz * d_pump, 0.0)
+        n2_pump[-1] = _compute_n2_local(
+            geom, grid, P_pump_z[-1], 0.0, zeros_bins, zeros_bins
+        )
 
     # 2. Spontaneous-emission source per bin [W/m] on the pump-only profile.
     #    Same expression as the S_ase term in `_rate_fwd`; only n2 varies in z.
@@ -429,13 +492,15 @@ def solve_steady_state(
     max_iter: int = 100,
     relaxation: float = 1.0,
     init: Optional[tuple] = None,
+    pump_direction: str = "co",
 ) -> SteadyResult:
     """Iterative-shooting BVP solver.
 
     Args:
         geom: fiber geometry and doping.
         grid: spectral grid for this fiber.
-        P_pump: input pump power at z=0 [W] (co-pumped only for now).
+        P_pump: input pump power [W]. Injected at z=0 for a co-pump and at
+                z=L for a counter-pump (see `pump_direction`).
         P_signal_avg: input signal power at z=0 [W] (average, quasi-CW).
         ase_in_fwd: forward ASE spectrum at z=0 [W per bin], shape (n_bins,).
                     Zero for the first stage; output of the previous stage's
@@ -453,10 +518,13 @@ def solve_steady_state(
               Used by `solve_steady_state_homotopy` for the warm-start
               continuation recipe (Ren et al., Opt. Quantum Electron.
               47(7), 2199, 2015).
+        pump_direction: "co" (pump injected at z=0, co-propagating with the
+              signal) or "counter" (pump injected at z=L, counter-propagating).
 
     Returns:
         SteadyResult with full P_k(z) profiles and the converged n2(z).
     """
+    counter = pump_direction == "counter"
     z = np.linspace(0.0, geom.fiber_length, n_z)
     dz = z[1] - z[0]
 
@@ -465,7 +533,7 @@ def solve_steady_state(
         # Beer-Lambert inversion (see `_spontaneous_emission_init`).
         P_pump_z, P_signal_z, P_ase_fwd_z, P_ase_bwd_z = (
             _spontaneous_emission_init(
-                geom, grid, P_pump, P_signal_avg, ase_in_fwd, n_z
+                geom, grid, P_pump, P_signal_avg, ase_in_fwd, n_z, pump_direction
             )
         )
     else:
@@ -520,7 +588,10 @@ def solve_steady_state(
         #    just-updated forward profile and the frozen previous-iteration
         #    backward profile. This keeps gain-saturation pinned to the local
         #    state and prevents single-pass blow-up in high-gain stages.
-        P_pump_z[0] = P_pump
+        if counter:
+            P_pump_z[-1] = P_pump        # counter-pump injected at z=L
+        else:
+            P_pump_z[0] = P_pump
         P_signal_z[0] = P_signal_avg
         P_ase_fwd_z[0] = ase_in_fwd
         n2_z[0] = _compute_n2_local(
@@ -554,7 +625,11 @@ def solve_steady_state(
                 n2_lo, geom, grid,
             )
 
-            P_pump_z[i + 1] = max(P_p + dz / 6.0 * (d_p1 + 2 * d_p2 + 2 * d_p3 + d_p4), 0.0)
+            if not counter:
+                # Co-pump advances with the forward channels. For a counter-pump
+                # the pump is a backward channel (integrated in the backward
+                # sweep below); leave its profile untouched here.
+                P_pump_z[i + 1] = max(P_p + dz / 6.0 * (d_p1 + 2 * d_p2 + 2 * d_p3 + d_p4), 0.0)
             P_signal_z[i + 1] = max(P_s + dz / 6.0 * (d_s1 + 2 * d_s2 + 2 * d_s3 + d_s4), 0.0)
             P_ase_fwd_z[i + 1] = np.maximum(
                 P_a + dz / 6.0 * (d_a1 + 2 * d_a2 + 2 * d_a3 + d_a4), 0.0
@@ -572,7 +647,8 @@ def solve_steady_state(
         P_ase_bwd_z[-1] = R_out * P_ase_fwd_z[-1]
 
         # 3. Backward sweep — n2 again recomputed at every step from the new
-        #    P_fwd profile and the locally-just-updated P_bwd.
+        #    P_fwd profile and the locally-just-updated P_bwd. A counter-pump
+        #    is integrated here too (same z=L→0 direction as backward ASE).
         for i in range(n_z - 2, -1, -1):
             n2_hi = _compute_n2_local(
                 geom, grid,
@@ -589,6 +665,14 @@ def solve_steady_state(
             P_ase_bwd_z[i] = np.maximum(
                 P_b + dz / 6.0 * (r1 + 2 * r2 + 2 * r3 + r4), 0.0
             )
+
+            if counter:
+                P_p = P_pump_z[i + 1]
+                q1 = _rate_pump(P_p, n2_hi, geom, grid)
+                q2 = _rate_pump(P_p + 0.5 * dz * q1, n2_hi, geom, grid)
+                q3 = _rate_pump(P_p + 0.5 * dz * q2, n2_hi, geom, grid)
+                q4 = _rate_pump(P_p + dz * q3, n2_hi, geom, grid)
+                P_pump_z[i] = max(P_p + dz / 6.0 * (q1 + 2 * q2 + 2 * q3 + q4), 0.0)
 
         # Refresh the diagnostic n2 profile from the converged P fields.
         n2_z = _compute_n2_profile(
@@ -673,6 +757,7 @@ def solve_steady_state(
         P_ase_bwd_z=P_ase_bwd_z,
         converged=converged,
         iterations=iterations,
+        pump_direction=pump_direction,
         parasitic_lasing=parasitic or runaway,
         parasitic_gain_max_dB=max_g_dB,
         under_resolved=under_resolved,
@@ -721,12 +806,15 @@ def solve_steady_state_homotopy(
     tol: float = 1e-5,
     max_iter: int = 100,
     health_predicate=None,
+    pump_direction: str = "co",
 ) -> SteadyResult:
     """Homotopy-continuation wrapper around `solve_steady_state`.
 
     `health_predicate(result) -> bool` is called after each step; if it
     returns True (i.e. "physical, stop"), the wrapper returns early.
     Default predicate accepts anything (run all steps).
+
+    `pump_direction` ("co"/"counter") is threaded into every sub-solve.
     """
     from dataclasses import replace as _replace
 
@@ -747,6 +835,7 @@ def solve_steady_state_homotopy(
         P_pump=P_pump, P_signal_avg=0.0,
         ase_in_fwd=zeros_ase,
         R_in=R_in, R_out=R_out, n_z=n_z, tol=tol, max_iter=max_iter,
+        pump_direction=pump_direction,
     )
     steps_used = 1
     notes.append("homotopy step 1: pump-only solve converged")
@@ -761,6 +850,7 @@ def solve_steady_state_homotopy(
         ase_in_fwd=zeros_ase,
         R_in=R_in, R_out=R_out, n_z=n_z, tol=tol, max_iter=max_iter,
         init=init2,
+        pump_direction=pump_direction,
     )
     steps_used = 2
     notes.append("homotopy step 2: signal added, no ASE source")
@@ -773,6 +863,7 @@ def solve_steady_state_homotopy(
         ase_in_fwd=ase_in_fwd,
         R_in=R_in, R_out=R_out, n_z=n_z, tol=tol, max_iter=max_iter,
         init=init3,
+        pump_direction=pump_direction,
     )
     steps_used = 3
     notes.append("homotopy step 3: ASE source enabled, signal-clamped basin")
@@ -792,6 +883,7 @@ def solve_steady_state_homotopy(
             ase_in_fwd=ase_in_fwd,
             R_in=R_in, R_out=R_out, n_z=n_z, tol=tol, max_iter=max_iter,
             init=init_k,
+            pump_direction=pump_direction,
         )
         seed = rk
         steps_used += 1
@@ -809,6 +901,7 @@ def solve_steady_state_homotopy(
         steps_used += 1
         init_xu = _linear_gain_shape_init(
             geom, grid, P_pump, P_signal_avg, ase_in_fwd, n_z, eta_slope, QD,
+            pump_direction=pump_direction,
         )
         r_xu = solve_steady_state(
             geom, grid,
@@ -816,6 +909,7 @@ def solve_steady_state_homotopy(
             ase_in_fwd=ase_in_fwd,
             R_in=R_in, R_out=R_out, n_z=n_z, tol=tol, max_iter=max_iter,
             init=init_xu,
+            pump_direction=pump_direction,
         )
         notes.append(
             f"homotopy step {steps_used}: Xu et al. 2014 linear-gain shape "
@@ -853,6 +947,7 @@ def _linear_gain_shape_init(
     n_z: int,
     eta_slope: float,
     QD: float,
+    pump_direction: str = "co",
 ) -> tuple:
     """Build an `init` tuple for `solve_steady_state` using Xu et al. 2014's
     linear-gain-shape initial guess (Optik 2014, pii S1068520014000546).
@@ -860,7 +955,8 @@ def _linear_gain_shape_init(
     The signal power follows a log-linear ramp from `P_signal_in` to an
     estimated output `P_signal_in + η_slope · QD · P_pump`. Xu et al.
     showed that any `η_slope ∈ [0.3, 0.9]` gives convergence in ≤ 8
-    iterations across the design envelope they tested.
+    iterations across the design envelope they tested. For a counter-pump
+    the pump-decay seed is mirrored so it peaks at z=L.
     """
     z = np.linspace(0.0, geom.fiber_length, n_z)
     L = geom.fiber_length
@@ -874,8 +970,10 @@ def _linear_gain_shape_init(
     )
 
     # Pump decays at the cold-cladding rate (lower bound on absorption).
+    # Co-pump decays from z=0; counter-pump decays from z=L (mirror the axis).
     alpha_pump_cold = geom.gamma_pump * geom.N_Yb * grid.sigma_a_pump
-    P_pump_z = P_pump * np.exp(-alpha_pump_cold * z)
+    z_from_inject = (L - z) if pump_direction == "counter" else z
+    P_pump_z = P_pump * np.exp(-alpha_pump_cold * z_from_inject)
 
     P_ase_fwd_z = np.tile(ase_in_fwd.astype(float), (n_z, 1))
     P_ase_bwd_z = np.zeros((n_z, grid.n_bins))

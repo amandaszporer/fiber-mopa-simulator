@@ -1,0 +1,189 @@
+{
+  "name": "3-Stage Yb MOPA \u2014 counter-pumped stages 2 & 3 (BGU p-2026-158)",
+  "description": "Variant of the BGU 3-stage MOPA: AMP-1 co-pumped, AMP-2 and AMP-3 counter-pumped. Created to exercise counter-propagating pump support.",
+  "seed": {
+    "average_power": 0.00075,
+    "rep_rate": 100000.0,
+    "pulse_duration": 8e-09,
+    "linewidth": 10000000000.0,
+    "wavelength": 1.064e-06,
+    "mfd": 5e-06
+  },
+  "components": [
+    {
+      "type": "Isolator",
+      "name": "ISO-LP",
+      "insertion_loss_dB": 0.55,
+      "isolation_dB": 43.0
+    },
+    {
+      "type": "PumpCombiner",
+      "name": "PC-1",
+      "insertion_loss_dB": 0.21
+    },
+    {
+      "type": "Amplifier",
+      "name": "AMP-1",
+      "core_diameter": 5e-06,
+      "clad_diameter": 0.000131,
+      "core_na": 0.12,
+      "length": 3.0,
+      "clad_absorption_dB_per_m": 1.65,
+      "pump_power": 1.0,
+      "pump_direction": "co",
+      "pump_wavelength": 9.76e-07,
+      "signal_wavelength": 1.064e-06,
+      "dopant": "Yb",
+      "num_segments": 200,
+      "R_in": 0.0,
+      "R_out": 0.0001,
+      "m_pol": 2,
+      "alpha_bg_dB_per_m": 0.005
+    },
+    {
+      "type": "Isolator",
+      "name": "ISO-HP-1",
+      "insertion_loss_dB": 1.6,
+      "isolation_dB": 38.0
+    },
+    {
+      "type": "Circulator",
+      "name": "CIRC-1 (1->2)",
+      "insertion_loss_dB": 1.95
+    },
+    {
+      "type": "BandpassFilter",
+      "name": "BPF-12 (FBG)",
+      "center_wavelength": 1.064e-06,
+      "fwhm": 2e-09,
+      "insertion_loss_dB": 0.5,
+      "rejection_dB": 40.0
+    },
+    {
+      "type": "Circulator",
+      "name": "CIRC-1 (2->3)",
+      "insertion_loss_dB": 1.96
+    },
+    {
+      "type": "ModeFieldAdapter",
+      "name": "MFA-5/10",
+      "insertion_loss_dB": 0.29,
+      "output_mfd": 1e-05
+    },
+    {
+      "type": "PumpCombiner",
+      "name": "PC-2",
+      "insertion_loss_dB": 0.12
+    },
+    {
+      "type": "Amplifier",
+      "name": "AMP-2",
+      "core_diameter": 1.08e-05,
+      "clad_diameter": 0.0001255,
+      "core_na": 0.079,
+      "length": 2.0,
+      "clad_absorption_dB_per_m": 5.1,
+      "pump_power": 9.0,
+      "pump_direction": "counter",
+      "pump_wavelength": 9.76e-07,
+      "signal_wavelength": 1.064e-06,
+      "dopant": "Yb",
+      "num_segments": 200,
+      "R_in": 0.0,
+      "R_out": 0.0001,
+      "m_pol": 2,
+      "alpha_bg_dB_per_m": 0.005
+    },
+    {
+      "type": "Isolator",
+      "name": "ISO-HP-2",
+      "insertion_loss_dB": 0.5,
+      "isolation_dB": 30.0
+    },
+    {
+      "type": "Circulator",
+      "name": "CIRC-2 (1->2)",
+      "insertion_loss_dB": 0.8
+    },
+    {
+      "type": "BandpassFilter",
+      "name": "BPF-23 (FBG)",
+      "center_wavelength": 1.064e-06,
+      "fwhm": 2e-09,
+      "insertion_loss_dB": 0.5,
+      "rejection_dB": 40.0
+    },
+    {
+      "type": "Circulator",
+      "name": "CIRC-2 (2->3)",
+      "insertion_loss_dB": 0.8
+    },
+    {
+      "type": "ModeFieldAdapter",
+      "name": "MFA-10/30",
+      "insertion_loss_dB": 0.32,
+      "output_mfd": 3e-05
+    },
+    {
+      "type": "PumpCombiner",
+      "name": "PC-3",
+      "insertion_loss_dB": 0.5
+    },
+    {
+      "type": "Amplifier",
+      "name": "AMP-3",
+      "core_diameter": 2.88e-05,
+      "clad_diameter": 0.0002525,
+      "core_na": 0.062,
+      "length": 1.2,
+      "clad_absorption_dB_per_m": 6.93,
+      "pump_power": 100.0,
+      "pump_direction": "counter",
+      "pump_wavelength": 9.76e-07,
+      "signal_wavelength": 1.064e-06,
+      "dopant": "Yb",
+      "num_segments": 200,
+      "R_in": 0.0,
+      "R_out": 0.0001,
+      "m_pol": 2,
+      "alpha_bg_dB_per_m": 0.005
+    }
+  ],
+  "metadata": {
+    "project": "p-2026-158",
+    "institution": "Ben-Gurion University",
+    "created": "2026-04-25",
+    "version": "2.0-measured",
+    "notes": "Updated 2026-05-09 from purchased-component datasheets. Sources: ISO-LP=Seagnol HPIISO-1064-10-H1-B-15-NE S/N 20240011006; PC-1=Seagnol MSPC-1064-211-F-10-105/125-5/130-5/130-15 S/N 25050300228; AMP-1 fiber=Coherent/Nufern SM-YDF-5/130-VIII lot 23-A4495-00-1D-05-02-02; ISO-HP-1=Seagnol CHPIISO-1064-01-H1-B-15-NE S/N 20240006; CIRC-1=Seagnol PICIR-1064-3-B-15-NE S/N 25041511; MFA-5/10=MFA-06-HI-10-1.5-2 S/N 25323050539; PC-2=Seagnol MSPC-1064-211-F-10-105/125-10/125-15 S/N 10032089; AMP-2 fiber=Coherent/Nufern LMA-YDF-10/125-9M lot 25-A4901-00-1B-11-01; MFA-10/30=MFA-06-SS-SS-1.5-2 S/N 25333998; AMP-3 fiber=Coherent/Nufern LMA-YDF-30/250-9M lot 21-D2144-00-2B-02. AMP-2 and AMP-3 clad_absorption_dB_per_m converted from datasheet 915 nm values to operating-wavelength (976 nm) equivalents using the ~3.0x ratio published by Coherent/Nufern across their LMA-YDF family (e.g. LMA-YDF-10/125-VIII: 1.6 dB/m at 915 nm, 4.8 dB/m at 976 nm). BPF-12, BPF-23, ISO-HP-2, and PC-3 still use literature estimates - no datasheets yet provided. CIRC-1 and CIRC-2 are used in double-pass mode with the FBGs (BPF-12, BPF-23) acting as the reflectors: each circulator is split into two entries (port 1->2 and port 2->3) placed around the FBG so the chain mirrors the physical layout. CIRC-1 port-pair losses 1.95 / 1.96 dB are the Seagnol datasheet tested values (S/N 25041511); CIRC-2 still uses 0.8 dB literature estimate for both passes - no datasheet yet."
+  },
+  "requirements": {
+    "wavelength": {
+      "target": 1.064e-06,
+      "tolerance": 2e-10
+    },
+    "spectral_width": {
+      "max": 5e-11
+    },
+    "rep_rate": {
+      "min": 10,
+      "max": 100000
+    },
+    "pulse_duration": {
+      "min": 4e-09,
+      "max": 8e-09
+    },
+    "avg_power": {
+      "min": 22,
+      "max": 70
+    },
+    "peak_power": {
+      "min": 15000
+    },
+    "amplifier": {
+      "ase_ratio_dB_max": -20,
+      "sbs_ratio_max": 1.0,
+      "srs_ratio_max": 1.0,
+      "no_parasitic_lasing": true
+    }
+  }
+}

@@ -115,6 +115,7 @@ def _b1_inter_pulse(
     dt_min: float = 1e-9,
     max_steps: int = 20000,
     p_solve_drift_tol: float = 0.05,
+    pump_direction: str = "co",
 ) -> _B1Result:
     """Inter-pulse rate-equation time-stepping (docs/ase.md §4.2 B1).
 
@@ -140,6 +141,7 @@ def _b1_inter_pulse(
             P_pump_in=P_pump, P_signal_in=0.0,
             ase_in_fwd=ase_in_fwd,
             R_in=R_in, R_out=R_out, n_z=n_z,
+            pump_direction=pump_direction,
         )
         r_abs, r_em = _absorption_emission_rates(
             geom, grid, p_pump, np.zeros(n_z), p_fwd, p_bwd,
@@ -255,6 +257,7 @@ def _b2_pulse(
     pulse_energy: float,
     n_z: int,
     pulse_window_factor: float = 6.0,
+    pump_direction: str = "co",
 ) -> _B2Result:
     """Time-dependent Lax-Wendroff pulse solver (docs/ase.md §4.2 B2).
 
@@ -282,6 +285,7 @@ def _b2_pulse(
     error below 0.1% of the integrated energy.
     """
     notes: list[str] = []
+    counter = pump_direction == "counter"
     L = geom.fiber_length
     dz = L / (n_z - 1)
     z = np.linspace(0.0, L, n_z)
@@ -341,8 +345,14 @@ def _b2_pulse(
         # is what makes the small-signal limit recover the analytic
         # Frantz-Nodvik gain G₀ = exp(g₀·L) (docs/ase.md §10.3).
         P_pump_new = np.empty(n_z)
-        P_pump_new[1:] = _propagate(g_pump[1:] - alpha_bg, P_pump_z[:-1])
-        P_pump_new[0] = P_pump_in
+        if counter:
+            # Counter-pump advects in −z: node i takes its upstream amplitude
+            # from node i+1, and the pump enters at the z=L boundary.
+            P_pump_new[:-1] = _propagate(g_pump[:-1] - alpha_bg, P_pump_z[1:])
+            P_pump_new[-1] = P_pump_in
+        else:
+            P_pump_new[1:] = _propagate(g_pump[1:] - alpha_bg, P_pump_z[:-1])
+            P_pump_new[0] = P_pump_in
 
         P_signal_new = np.empty(n_z)
         P_signal_new[1:] = _propagate(g_sig[1:] - alpha_bg, P_signal_z[:-1])
@@ -398,10 +408,12 @@ def solve_time_dependent(
     n_z: int = 200,
     cycles_max: int = 25,
     cycles_tol: float = 1e-3,
+    pump_direction: str = "co",
 ) -> SteadyResult:
     """Run a time-dependent solve and return a steady-state-shaped result.
 
-    See module docstring for the meaning of each mode.
+    See module docstring for the meaning of each mode. `pump_direction`
+    ("co"/"counter") is threaded into every branch.
     """
     period = 1.0 / rep_rate if rep_rate > 0 else float("inf")
     tau = geom.tau
@@ -420,6 +432,7 @@ def solve_time_dependent(
             geom=geom, grid=grid,
             P_pump=P_pump, P_signal_avg=P_signal_avg,
             ase_in_fwd=ase_in_fwd, R_in=R_in, R_out=R_out, n_z=n_z,
+            pump_direction=pump_direction,
         )
 
     # "full" forces the B1+B2 path even at high rep — useful for pulse-shape
@@ -436,6 +449,7 @@ def solve_time_dependent(
             ase_in_fwd=ase_in_fwd,
             R_in=R_in, R_out=R_out, n_z=n_z,
             cycles_max=eff_cycles_max, cycles_tol=cycles_tol,
+            pump_direction=pump_direction,
         )
 
     raise ValueError(f"Unknown time-dependent mode: {mode!r}")
@@ -455,6 +469,7 @@ def _periodic_steady_state(
     n_z: int,
     cycles_max: int,
     cycles_tol: float,
+    pump_direction: str = "co",
 ) -> SteadyResult:
     """B1 recovery + B2 pulse, iterated to periodic steady state (§4.3).
 
@@ -497,6 +512,7 @@ def _periodic_steady_state(
         health_predicate=lambda r: compute_solver_health(
             r, geom, grid, P_pump, P_signal_avg
         ).energy_status != "violation",
+        pump_direction=pump_direction,
     )
 
     # If the system is past parasitic-lasing threshold, no physical periodic
@@ -525,6 +541,7 @@ def _periodic_steady_state(
             ase_in_fwd=ase_in_fwd,
             period=period,
             R_in=R_in, R_out=R_out, n_z=n_z,
+            pump_direction=pump_direction,
         )
         notes.extend(b1.notes)
 
@@ -550,6 +567,7 @@ def _periodic_steady_state(
             pulse_duration=pulse_duration,
             pulse_energy=pulse_energy,
             n_z=n_z,
+            pump_direction=pump_direction,
         )
         notes.extend(b2.notes)
 
@@ -606,6 +624,7 @@ def _periodic_steady_state(
         P_ase_bwd_z=last_b1.P_ase_bwd_z,
         converged=converged_periodic,
         iterations=cycle + 1,
+        pump_direction=pump_direction,
         parasitic_lasing=parasitic_lasing,
         parasitic_gain_max_dB=parasitic_dB,
         notes=notes,
@@ -677,6 +696,7 @@ def solve_steady_state_robust(
     n_z: int = 200,
     tol: float = 1e-5,
     max_iter: int = 100,
+    pump_direction: str = "co",
 ) -> SteadyResult:
     """Production entry point for steady-state amplifier solves.
 
@@ -684,6 +704,8 @@ def solve_steady_state_robust(
     direct solve + health check, then homotopy continuation (Ren et al.
     2015) on violation, then a time-marching B1+B2 arbiter (PyFiberAmp
     `DynamicSimulation` pattern) on continued violation.
+
+    `pump_direction` ("co"/"counter") is threaded into every layer.
 
     Returns a `SteadyResult` whose `health` field carries the
     energy-residual / η_ASE / g₀·L diagnostics and whose
@@ -697,6 +719,7 @@ def solve_steady_state_robust(
         P_pump=P_pump, P_signal_avg=P_signal_avg,
         ase_in_fwd=ase_in_fwd,
         R_in=R_in, R_out=R_out, n_z=n_z, tol=tol, max_iter=max_iter,
+        pump_direction=pump_direction,
     )
     h1 = compute_solver_health(r1, geom, grid, P_pump, P_signal_avg)
     if h1.energy_status != "violation":
@@ -713,6 +736,7 @@ def solve_steady_state_robust(
         ase_in_fwd=ase_in_fwd,
         R_in=R_in, R_out=R_out, n_z=n_z, tol=tol, max_iter=max_iter,
         health_predicate=_passes,
+        pump_direction=pump_direction,
     )
     h2 = compute_solver_health(r2, geom, grid, P_pump, P_signal_avg)
     if h2.energy_status != "violation":
@@ -737,6 +761,7 @@ def solve_steady_state_robust(
         ase_in_fwd=ase_in_fwd,
         R_in=R_in, R_out=R_out, n_z=n_z,
         mode="full",
+        pump_direction=pump_direction,
     )
     h3 = compute_solver_health(r3, geom, grid, P_pump, P_signal_avg)
 

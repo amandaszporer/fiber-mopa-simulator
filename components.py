@@ -716,12 +716,6 @@ class Amplifier(Component):
                                 average-power answer as Mode A at 100 kHz
                                 but ~10× slower.
         """
-        if self.pump_direction != "co":
-            raise NotImplementedError(
-                f"pump_direction={self.pump_direction!r} is not yet implemented; "
-                "only co-pumping is supported."
-            )
-
         signal = state.signal
         signal = replace(signal, mfd=self.fiber_mfd)
 
@@ -740,6 +734,7 @@ class Amplifier(Component):
                 ase_in_fwd=ase_in_fwd,
                 R_in=self.R_in, R_out=self.R_out,
                 n_z=self.num_segments,
+                pump_direction=self.pump_direction,
             )
         elif mode in ("time-dependent", "full"):
             result = solve_time_dependent(
@@ -753,6 +748,7 @@ class Amplifier(Component):
                 R_in=self.R_in, R_out=self.R_out,
                 n_z=self.num_segments,
                 mode="full" if mode == "full" else "auto",
+                pump_direction=self.pump_direction,
             )
         else:
             raise ValueError(f"Unknown mode: {mode!r}")

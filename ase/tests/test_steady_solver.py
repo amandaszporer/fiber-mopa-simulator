@@ -94,6 +94,37 @@ def test_zero_signal_backward_has_975_structure(stage1_setup, zero_ase):
     )
 
 
+def test_counter_pump_injects_at_output_end(stage1_setup, zero_ase):
+    """Counter-pumping injects the pump at z=L; the boundary condition and the
+    residual must flip relative to a co-pump solve, while the total absorbed
+    pump (and hence quasi-CW gain) stays essentially the same."""
+    geom, grid, _ = stage1_setup
+    co = solve_steady_state(
+        geom, grid, P_pump=0.3, P_signal_avg=5e-3,
+        ase_in_fwd=zero_ase, R_in=0.0, R_out=1e-4, pump_direction="co",
+    )
+    ct = solve_steady_state(
+        geom, grid, P_pump=0.3, P_signal_avg=5e-3,
+        ase_in_fwd=zero_ase, R_in=0.0, R_out=1e-4, pump_direction="counter",
+    )
+    assert co.converged and ct.converged
+
+    # Pump boundary condition lands on the correct facet.
+    assert np.isclose(co.P_pump_z[0], 0.3) and co.P_pump_z[-1] < 0.3
+    assert np.isclose(ct.P_pump_z[-1], 0.3) and ct.P_pump_z[0] < 0.3
+
+    # Residual exits the opposite facet from injection.
+    assert ct.pump_residual == ct.P_pump_z[0]
+    assert co.pump_residual == co.P_pump_z[-1]
+
+    # Same total pump absorbed (both directions absorb the same photons in
+    # this saturated quasi-CW regime) → near-identical signal gain.
+    co_abs = 0.3 - co.pump_residual
+    ct_abs = 0.3 - ct.pump_residual
+    assert abs(co_abs - ct_abs) / co_abs < 0.05
+    assert abs(ct.signal_out - co.signal_out) / co.signal_out < 0.05
+
+
 def test_high_signal_transparency(stage1_setup, zero_ase):
     """ase.md §10.2: very strong signal saturates inversion → ASE ≪ signal,
     and gain → small (transparency limit)."""

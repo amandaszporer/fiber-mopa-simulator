@@ -89,7 +89,7 @@ Both are non-trivial (~days). Neither is required for our current example MOPA s
 
 ## Other targets considered (not built)
 
-- **Liu et al., Procedia Eng. 140, 123 (2016)** — 2-stage 1064 nm 100 kHz 200 ns MOPA. Architecturally the closest peer to our system. Blocked because the power amplifier is **counter-pumped** and `Amplifier.propagate` raises `NotImplementedError` for `pump_direction != "co"`. Implementing counter-pumping in the BVP solver is ~1 day of work.
+- **Liu et al., Procedia Eng. 140, 123 (2016)** — 2-stage 1064 nm 100 kHz 200 ns MOPA. Architecturally the closest peer to our system. The power amplifier is **counter-pumped**, which the BVP solver now supports (`pump_direction="counter"`); building this benchmark is no longer blocked, just not yet done.
 - **Lago et al., JOSA B 27, 2231 (2010)** — multi-stage ns MOPA with explicit ASE/OSNR comparison to model. Best ASE benchmark in the literature. Not yet obtained (paywalled).
 - **He et al., Opt. Express 14, 12846 (2006)** — gold-standard 4-stage Yb cascade. Operates broadband CW, not the ns-pulsed regime our model is built for.
 
