@@ -15,6 +15,8 @@ from pathlib import Path
 
 import numpy as np
 
+_C = 3e8  # speed of light [m/s] — matches framework / components convention
+
 
 def _import_plt():
     import matplotlib
@@ -173,12 +175,18 @@ def plot_ase_spectra(sim, out_dir: str | Path) -> Path:
         fwd_dBm_per_nm = 10 * np.log10(np.maximum(fwd / d_lambda_nm * 1e3, 1e-15))
         bwd_dBm_per_nm = 10 * np.log10(np.maximum(bwd / d_lambda_nm * 1e3, 1e-15))
 
+        # The orange/red curves are the spontaneous-emission ASE channels only;
+        # the coherent signal is tracked separately and is NOT part of them.
         ax.plot(wl, fwd_dBm_per_nm, color="tab:orange",
-                label=f"Forward ASE @ z=L (Σ={info['ase_power_out']*1e6:.1f} uW)")
+                label=f"Forward ASE only — signal excluded "
+                      f"(Σ={info['ase_power_out']*1e6:.1f} uW)")
         ax.plot(wl, bwd_dBm_per_nm, color="tab:red", linestyle="--",
                 label=f"Backward ASE @ z=0 (Σ={info['ase_power_bwd']*1e6:.1f} uW)")
+
+        y_top = max(fwd_dBm_per_nm.max(), bwd_dBm_per_nm.max())
+
         ax.axvline(1064.0, color="grey", linestyle=":", alpha=0.6,
-                   label="Signal (1064 nm)")
+                   label="Signal wavelength (1064 nm)")
         ax.axvline(1030.0, color="green", linestyle=":", alpha=0.4,
                    label="Yb gain peak (1030 nm)")
         ax.axvline(976.0, color="blue", linestyle=":", alpha=0.4,
@@ -189,8 +197,10 @@ def plot_ase_spectra(sim, out_dir: str | Path) -> Path:
         ax.set_title(f"{amp.name} ASE Spectrum")
         ax.legend(fontsize=8, loc="lower right")
         ax.grid(True, alpha=0.3)
-        ax.set_ylim(bottom=max(-100,
-                                min(fwd_dBm_per_nm.min(), bwd_dBm_per_nm.min()) - 5))
+        ax.set_ylim(
+            bottom=max(-100, min(fwd_dBm_per_nm.min(), bwd_dBm_per_nm.min()) - 5),
+            top=y_top + 8,  # headroom at the top
+        )
 
     fig.tight_layout()
     out_path = out_dir / "ase_spectra.png"

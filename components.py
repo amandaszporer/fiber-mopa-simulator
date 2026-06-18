@@ -544,7 +544,7 @@ class Amplifier(Component):
                 description="Dopant key in DOPANT_REGISTRY (e.g. 'Yb')",
             ),
             "num_segments": Param(
-                type=int, min=10, max=1000, default=200,
+                type=int, min=10, max=8000, default=4000,
                 description="Number of z-grid points for the BVP solve",
             ),
             "R_in": Param(
